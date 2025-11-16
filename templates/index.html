@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Tracker</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        
+        /* --- Layout Containers --- */
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            margin-bottom: 20px;
+        }
+
+        /* --- View Tabs (Left Side) --- */
+        .tabs { 
+            display: flex; 
+            border-bottom: 2px solid #ccc;
+        }
+        .tab-button {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            font-size: 1.05em;
+            color: #555;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px; 
+        }
+        .tab-button.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            font-weight: bold;
+        }
+
+        /* --- Action Tabs (Top Right) --- */
+        .action-tabs { 
+            display: flex; 
+            gap: 10px;
+        }
+        .action-tab-button {
+            padding: 8px 12px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .action-tab-button.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        /* --- Form Container --- */
+        .form-container {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .form-tab-content {
+            display: none; /* Hide all form content initially */
+        }
+        .form-tab-content.active {
+            display: block;
+        }
+        
+        /* Form Styling */
+        form label { display: block; margin-top: 10px; font-weight: bold; }
+        form input[type="text"], form select {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        form button {
+            margin-top: 15px;
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .message-box { 
+            margin-top: 10px; 
+            padding: 10px; 
+            border-radius: 4px; 
+            font-weight: bold; 
+        }
+        .message-box.success { background-color: #d4edda; color: #155724; }
+        .message-box.error { background-color: #f8d7da; color: #721c24; }
+
+
+        /* --- Task List Styling --- */
+        .task-list { list-style: none; padding-left: 10px; }
+        .task-item { 
+            margin: 10px 0; 
+            padding: 10px; 
+            border-left: 5px solid;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        /* Status-specific styling */
+        .task-item.ACTIVE { border-left-color: #007bff; }
+        .task-item.COMPLETED { border-left-color: #28a745; background-color: #e6ffe6; }
+        .task-item.ABANDONED { border-left-color: #ffc107; background-color: #fff8e6; }
+        .task-item.CLEAR { border-left-color: #6c757d; background-color: #f0f0f0; opacity: 0.7; }
+        
+        /* Layout */
+        .task-row { display: flex; align-items: center; gap: 15px; flex-wrap: nowrap; }
+        .task-toggle { cursor: pointer; font-size: 1.1em; font-weight: bold; color: #333; margin-right: 5px; }
+        .task-item.collapsed > .task-children { display: none; }
+        .task-description { font-weight: bold; font-size: 1.1em; flex-basis: 35%; min-width: 200px; }
+        .task-detail { font-size: 0.9em; color: #555; flex-basis: 20%; white-space: nowrap; }
+        .task-detail-label { font-weight: 600; color: #333; margin-right: 5px; }
+        .task-id { font-weight: bold; font-size: 1em; flex-basis: 5%; color: #888; }
+
+        /* --- TOAST STYLING --- */
+        #toast-container {
+            position: fixed; /* Fixed position relative to the viewport */
+            top: 20px;
+            left: 50%; /* Start at the horizontal center */
+            transform: translateX(-50%); /* Shift left by half its own width */
+            z-index: 1000; /* Ensure it's on top of other elements */
+        }
+
+        .toast {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            opacity: 0; /* Start hidden */
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .toast.success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb;
+        }
+        .toast.error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb;
+}
+    </style>
+</head>
+<body>
+
+    <div id="toast-container"></div>
+
+    <header>
+        <h1>📝 Task Tracker</h1>
+        
+        <div class="action-tabs">
+            <button class="action-tab-button" data-tab="create-task">➕ Create Task</button>
+            <button class="action-tab-button" data-tab="update-task">🔄 Update Status</button>
+        </div>
+    </header>
+
+    <div class="form-container">
+        
+        <div id="create-task" class="form-tab-content">
+            <h3>Create New Task</h3>
+            <form id="create-task-form">
+                <label for="new-description">Description (max 500 char)</label>
+                <input type="text" id="new-description" name="description" maxlength="500" required>
+                
+                <label for="new-parent-id">Parent Task ID (Optional)</label>
+                <input type="text" id="new-parent-id" name="parent_id" placeholder="Enter ID of active parent task">
+                
+                <button type="submit">Create Task</button>
+            </form>
+        </div>
+
+        <div id="update-task" class="form-tab-content">
+            <h3>Update Task Status</h3>
+            <form id="update-task-form">
+                <label for="update-id">Task ID</label>
+                <input type="text" id="update-id" name="id" required>
+                
+                <label for="update-status">New Status</label>
+                <select id="update-status" name="status" required>
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="ABANDONED">ABANDONED</option>
+                    <option value="CLEAR">CLEAR</option>
+                </select>
+                
+                <button type="submit">Update Status</button>
+                <div id="update-message" class="message-box" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+
+
+    <div class="tabs" id="views-container">
+        <button class="tab-button" data-endpoint="/tasks/active-only">🟢 Active Tasks</button>
+        <button class="tab-button active" data-endpoint="/tasks/active">🟠 Non-Clear Tasks</button>
+        <button class="tab-button" data-endpoint="/tasks">⚪ All Tasks</button>
+    </div>
+
+    <div id="task-list-container">
+        Loading tasks...
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', initializeUI);
+
+        const TAB_BUTTONS = document.querySelectorAll('.tab-button');
+        const ACTION_TAB_BUTTONS = document.querySelectorAll('.action-tab-button');
+        const TASK_CONTAINER = document.getElementById('task-list-container');
+        
+        const taskCache = {};
+
+        function initializeUI() {
+            // Initialize View Tabs
+            TAB_BUTTONS.forEach(button => {
+                button.addEventListener('click', handleViewTabClick);
+            });
+            const defaultEndpoint = document.querySelector('.tab-button.active').getAttribute('data-endpoint');
+            fetchTasks(defaultEndpoint); // Load default view
+
+            // Initialize Action Tabs and Forms
+            initializeActionTabs();
+            document.getElementById('create-task-form').addEventListener('submit', handleCreateTask);
+            document.getElementById('update-task-form').addEventListener('submit', handleUpdateStatus);
+        }
+
+        // --- VIEW TAB LOGIC ---
+        function handleViewTabClick(event) {
+            const button = event.currentTarget;
+            const endpoint = button.getAttribute('data-endpoint');
+            
+            TAB_BUTTONS.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            
+            fetchTasks(endpoint);
+        }
+
+        // --- ACTION TAB LOGIC ---
+        function clearActionForms() {
+            document.getElementById('create-task-form').reset();
+            document.getElementById('update-task-form').reset();
+            // Hide all message boxes
+            document.getElementById('update-message').style.display = 'none';
+        }
+        
+        function initializeActionTabs() {
+            // Hide the form container when the page loads
+            document.querySelector('.form-container').style.display = 'none';
+
+            ACTION_TAB_BUTTONS.forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const targetTabId = event.currentTarget.getAttribute('data-tab');
+                    const formContainer = document.querySelector('.form-container');
+                    
+                    // Check if the clicked button is already active
+                    const alreadyActive = event.currentTarget.classList.contains('active');
+
+                    // Deactivate all buttons and hide all content
+                    ACTION_TAB_BUTTONS.forEach(btn => btn.classList.remove('active'));
+                    document.querySelectorAll('.form-tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    clearActionForms();
+
+                    if (alreadyActive) {
+                        // If the same tab was clicked, deactivate it and hide the container
+                        formContainer.style.display = 'none';
+                    } else {
+                        // If a new tab was clicked, activate it, show its content, and show the container
+                        event.currentTarget.classList.add('active');
+                        document.getElementById(targetTabId).classList.add('active');
+                        formContainer.style.display = 'block';
+                    }
+                });
+            });
+        }
+
+        // --- NEW TOAST FUNCTIONALITY ---
+        function showToast(message, isSuccess) {
+            const container = document.getElementById('toast-container');
+            
+            // Create the toast element
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.classList.add('toast', isSuccess ? 'success' : 'error');
+            
+            container.appendChild(toast);
+
+            // 1. Show the toast
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10); // Small delay to trigger the transition
+
+            // 2. Hide and remove the toast after a short period (e.g., 4 seconds)
+            setTimeout(() => {
+                toast.classList.remove('show');
+                // Remove element from DOM after transition completes
+                setTimeout(() => {
+                    container.removeChild(toast);
+                }, 500); 
+            }, 6000); // Display time
+        }
+
+        // --- FORM SUBMISSION HANDLERS (using showToast) ---
+        function handleCreateTask(event) {
+            event.preventDefault();
+            const form = event.target;
+            const data = {
+                description: form.elements['description'].value,
+                parent_id: form.elements['parent_id'].value ? parseInt(form.elements['parent_id'].value) : null
+            };
+
+            fetch('/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json().then(json => ({ status: response.status, body: json })))
+            .then(res => {
+                if (res.status === 201) {
+                    showToast('Task created successfully!', true);
+                    form.reset();
+                    
+                    Object.keys(taskCache).forEach(key => delete taskCache[key]);
+                    const activeEndpoint = document.querySelector('.tab-button.active').getAttribute('data-endpoint');
+                    fetchTasks(activeEndpoint);
+                } else {
+                    showToast(`Error: ${res.body.message || res.body.error}`, false);
+                }
+            })
+            .catch(e => {
+                showToast('Network error during task creation.', false);
+                console.error('Fetch error:', e);
+            });
+        }
+
+        function handleUpdateStatus(event) {
+            event.preventDefault();
+            const form = event.target;
+            const taskId = form.elements['id'].value;
+            const newStatus = form.elements['status'].value;
+
+            fetch(`/tasks/${taskId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            })
+            .then(response => response.json().then(json => ({ status: response.status, body: json })))
+            .then(res => {
+                if (res.status === 200) {
+                    showToast(`Status updated: ${res.body.message}`, true);
+
+                    Object.keys(taskCache).forEach(key => delete taskCache[key]);
+                    const activeEndpoint = document.querySelector('.tab-button.active').getAttribute('data-endpoint');
+                    fetchTasks(activeEndpoint);
+                } else {
+                    showToast(`Error: ${res.body.message || res.body.error}`, false);
+                }
+            })
+            .catch(e => {
+                showToast('Network error during status update.', false);
+                console.error('Fetch error:', e);
+            });
+        }
+
+        // --- END FORM SUBMISSION HANDLERS ---
+
+
+        // --- CORE VIEW LOGIC (MODIFIED FOR CACHE INVALIDATION) ---
+        function fetchTasks(endpoint) {
+            if (taskCache[endpoint]) {
+                console.log(`Loading tasks from cache for endpoint: ${endpoint}`);
+                renderTaskList(taskCache[endpoint]);
+                return; 
+            }
+
+            TASK_CONTAINER.innerHTML = 'Loading tasks...';
+            console.log(`Fetching tasks from server for endpoint: ${endpoint}`);
+            
+            fetch(endpoint)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(tasks => {
+                    taskCache[endpoint] = tasks; 
+                    renderTaskList(tasks);
+                })
+                .catch(e => {
+                    console.error('Error fetching tasks:', e);
+                    TASK_CONTAINER.innerHTML = 
+                        '<p style="color: red;">Error loading tasks. Check the server console.</p>';
+                });
+        }
+        
+        function renderTaskList(tasks) {
+            TASK_CONTAINER.innerHTML = '';
+            
+            if (tasks.length === 0) {
+                TASK_CONTAINER.innerHTML = '<p>No tasks found for this view.</p>';
+                return;
+            }
+
+            const list = document.createElement('ul');
+            list.classList.add('task-list');
+            
+            tasks.forEach(task => {
+                list.appendChild(renderTask(task));
+            });
+
+            TASK_CONTAINER.appendChild(list);
+        }
+
+        // --- UTILITY/RENDERING FUNCTIONS (Unchanged logic) ---
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return 'N/A';
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            } catch (e) {
+                return timestamp;
+            }
+        }
+        
+        function createDetailDiv(label, value, className) {
+            const div = document.createElement('div');
+            div.classList.add('task-detail', className);
+            div.innerHTML = `<span class="task-detail-label">${label}:</span> ${value}`;
+            return div;
+        }
+
+        function toggleChildren(event) {
+            event.stopPropagation(); 
+            const taskItem = event.currentTarget.closest('.task-item');
+            const childrenList = taskItem.querySelector('.task-children');
+            
+            if (childrenList) {
+                taskItem.classList.toggle('collapsed');
+                const toggleSpan = event.currentTarget;
+                if (taskItem.classList.contains('collapsed')) {
+                    toggleSpan.textContent = '▶'; 
+                } else {
+                    toggleSpan.textContent = '▼';
+                }
+            }
+        }
+        
+        function renderTask(task) {
+            const li = document.createElement('li');
+            li.classList.add('task-item', task.status); 
+            li.setAttribute('data-id', task.id);
+
+            const row = document.createElement('div');
+            row.classList.add('task-row');
+            
+            // Toggle Icon
+            const toggleSpan = document.createElement('span');
+            toggleSpan.classList.add('task-toggle');
+            
+            const hasChildren = task.children_tasks && task.children_tasks.length > 0;
+            if (hasChildren) {
+                toggleSpan.textContent = '▼'; 
+                toggleSpan.addEventListener('click', toggleChildren);
+            } else {
+                toggleSpan.textContent = '•'; 
+            }
+            row.appendChild(toggleSpan);
+
+            // Description 
+            const descriptionSpan = document.createElement('span');
+            descriptionSpan.classList.add('task-description');
+            descriptionSpan.textContent = task.description; 
+            row.appendChild(descriptionSpan);
+
+            // Status
+            const statusValue = `<span style="color: ${
+                task.status === 'ACTIVE' ? 'blue' : 
+                task.status === 'COMPLETED' ? 'green' : 
+                task.status === 'ABANDONED' ? 'orange' : 'gray'
+            };">${task.status}</span>`;
+            row.appendChild(createDetailDiv('Status', statusValue, 'task-status'));
+
+            // Start Timestamp
+            const startTime = formatTimestamp(task.start_timestamp);
+            row.appendChild(createDetailDiv('Started', startTime, 'task-start'));
+
+            // Finish Timestamp
+            const finishTime = task.finish_timestamp ? formatTimestamp(task.finish_timestamp) : 'N/A';
+            row.appendChild(createDetailDiv('Finished', finishTime, 'task-finish'));
+
+            // ID
+            const idDiv = document.createElement('div');
+            idDiv.classList.add('task-id');
+            idDiv.textContent = `#${task.id}`;
+            row.appendChild(idDiv);
+
+            li.appendChild(row);
+
+            // Recursive Children Rendering
+            if (hasChildren) {
+                const ul = document.createElement('ul');
+                ul.classList.add('task-list', 'task-children');
+                
+                task.children_tasks.forEach(child => {
+                    ul.appendChild(renderTask(child));
+                });
+                
+                li.appendChild(ul);
+            }
+
+            return li;
+        }
+    </script>
+</body>
+</html>
